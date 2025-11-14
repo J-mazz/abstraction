@@ -4,7 +4,6 @@ A robust, production-ready agentic framework built with LangGraph, featuring a n
 
 [![CodeScene Average Code Health](https://codescene.io/projects/73691/status-badges/average-code-health)](https://codescene.io/projects/73691)[![CodeScene Hotspot Code Health](https://codescene.io/projects/73691/status-badges/hotspot-code-health)](https://codescene.io/projects/73691)[![CodeScene System Mastery](https://codescene.io/projects/73691/status-badges/system-mastery)](https://codescene.io/projects/73691)
 
-<iframe src="https://github.com/sponsors/J-mazz/button" title="Sponsor J-mazz" height="32" width="114" style="border: 0; border-radius: 6px;"></iframe>
 
 ## Features
 
@@ -492,14 +491,7 @@ For issues and questions:
 - Check logs in `./logs/` directory
 - Enable debug logging in `config/config.yaml`
 
-## Roadmap
-
-- [ ] Additional tool categories (databases, APIs, etc.)
-- [ ] Multi-model support (Llama, GPT-4, etc.)
-- [ ] Plugin system for custom tools
-- [ ] Web interface option (in addition to Qt)
-- [ ] Docker container distribution
-- [ ] Cloud deployment guides
+<iframe src="https://github.com/sponsors/J-mazz/card" title="Sponsor J-mazz" height="225" width="600" style="border: 0;"></iframe>
 
 ---
 
