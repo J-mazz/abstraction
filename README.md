@@ -1,6 +1,8 @@
 # Abstraction - AI Agent Framework
 
-A robust, production-ready agentic framework built with LangGraph, featuring a native Qt GUI, human-in-the-loop approval, caching, and reasoning capabilities.
+A robust, production-ready agentic framework built with LangGraph, featuring a native Qt GUI, human-in-the-loop approval, caching, and reasoning capabilities.  [![CodeScene general](https://codescene.io/images/analyzed-by-codescene-badge.svg)](https://codescene.io/projects/73691)
+
+[![CodeScene Average Code Health](https://codescene.io/projects/73691/status-badges/average-code-health)](https://codescene.io/projects/73691)[![CodeScene Hotspot Code Health](https://codescene.io/projects/73691/status-badges/hotspot-code-health)](https://codescene.io/projects/73691)[![CodeScene System Mastery](https://codescene.io/projects/73691/status-badges/system-mastery)](https://codescene.io/projects/73691)
 
 ## Features
 
