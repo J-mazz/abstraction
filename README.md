@@ -6,15 +6,15 @@ A robust, production-ready agentic framework built with LangGraph, featuring a n
 
 ## Features
 
-- **🤖 LangGraph Orchestration**: Sophisticated agent workflow with state management
-- **🖥️ Native Qt GUI**: Beautiful, responsive desktop interface with real-time monitoring
+- **🤖 LangGraph Orchestration**: Robust agent workflow with state management
+- **🖥️ Native Qt GUI**: Responsive desktop interface with real-time monitoring
 - **✅ Human-in-the-Loop**: Approve or reject agent actions before execution
 - **💾 Intelligent Caching**: Persistent memory and conversation history
 - **🧠 Reasoning Node**: Self-assessment and confidence scoring for outputs
 - **🔧 Rich Tool System**: Pre-built tools for coding, web, accounting, and writing
-- **🔌 MCP Integration**: Full Model Context Protocol support for tool sharing
-- **🛡️ I/O Firewall**: Advanced input/output validation and sandboxing
-- **📦 Single Executable**: Bundle with PyApp for easy distribution
+- **🔌 MCP Integration**: Model Context Protocol support for tool sharing
+- **🛡️ I/O Firewall**: Input/output validation and sandboxing
+- **📦 Single Executable**: Bundled with PyApp for easy distribution
 - **🏷️ Apache 2.0 Licensed**: Uses Mistral-7B-Instruct-v0.3 (Apache 2.0)
 - **💻 Low Memory**: Runs on 16GB RAM with 4-bit quantization (~3.5GB model size)
 
