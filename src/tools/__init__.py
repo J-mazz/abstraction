@@ -1,4 +1,6 @@
 """Tool system for the agent."""
+from typing import Any, Dict, Optional
+
 from .base import (
     BaseTool,
     ToolCategory,
@@ -32,8 +34,20 @@ from .writing_tools import (
 )
 
 
-def register_all_tools():
+def _get_tool_config(config: Optional[Dict[str, Any]], *keys, default=None):
+    current = config or {}
+    for key in keys:
+        if not isinstance(current, dict) or key not in current:
+            return default
+        current = current[key]
+    return current
+
+
+def register_all_tools(config: Optional[Dict[str, Any]] = None):
     """Register all available tools."""
+    web_config = _get_tool_config(config, 'tools', 'web', default={}) or {}
+    web_allowed_hosts = web_config.get('allowed_hosts') or []
+    web_timeout = web_config.get('timeout', 30)
     # Coding tools
     tool_registry.register(CodeFormatterTool())
     tool_registry.register(CodeLinterTool())
@@ -42,8 +56,8 @@ def register_all_tools():
     tool_registry.register(FileWriteTool())
 
     # Web tools
-    tool_registry.register(WebScraperTool())
-    tool_registry.register(HTTPRequestTool())
+    tool_registry.register(WebScraperTool(allowed_hosts=web_allowed_hosts, timeout=web_timeout))
+    tool_registry.register(HTTPRequestTool(allowed_hosts=web_allowed_hosts, timeout=web_timeout))
     tool_registry.register(URLValidatorTool())
 
     # Accounting tools

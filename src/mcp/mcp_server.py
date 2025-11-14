@@ -5,7 +5,15 @@ import asyncio
 from typing import Any, Dict, List, Optional, Callable
 from mcp.server import Server
 from mcp.server.models import InitializationOptions
-from mcp.types import Tool as MCPTool, TextContent, ImageContent, EmbeddedResource
+from mcp.server.stdio import stdio_server
+from mcp.types import (
+    Tool as MCPTool,
+    TextContent,
+    ImageContent,
+    EmbeddedResource,
+    ListToolsResult,
+    CallToolResult,
+)
 from loguru import logger
 
 from ..tools.base import BaseTool, ToolRegistry, ToolOutput
@@ -50,7 +58,7 @@ class MCPServer:
         """Setup MCP protocol handlers."""
 
         @self.server.list_tools()
-        async def list_tools() -> List[MCPTool]:
+        async def list_tools() -> ListToolsResult:
             """List all available tools."""
             mcp_tools = []
 
@@ -68,20 +76,22 @@ class MCPServer:
                 mcp_tools.append(mcp_tool)
 
             logger.info(f"MCP: Listed {len(mcp_tools)} tools")
-            return mcp_tools
+            return ListToolsResult(tools=mcp_tools)
 
         @self.server.call_tool()
-        async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent | ImageContent | EmbeddedResource]:
+        async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
             """Execute a tool and return results."""
             logger.info(f"MCP: Tool call requested: {name} with args: {arguments}")
-
-            tool = self.tool_registry.get_tool(name)
-            if not tool:
-                error_msg = f"Tool '{name}' not found"
-                logger.error(f"MCP: {error_msg}")
-                return [TextContent(type="text", text=f"Error: {error_msg}")]
-
             try:
+                tool = self.tool_registry.get_tool(name)
+                if not tool:
+                    error_msg = f"Tool '{name}' not found"
+                    logger.error(f"MCP: {error_msg}")
+                    return CallToolResult(
+                        content=[TextContent(type="text", text=f"Error: {error_msg}")],
+                        isError=True,
+                    )
+
                 # Execute the tool
                 result: ToolOutput = self.tool_registry.execute_tool(name, **arguments)
 
@@ -92,17 +102,23 @@ class MCPServer:
                         response_text += f"\n\nMetadata: {result.metadata}"
 
                     logger.info(f"MCP: Tool '{name}' executed successfully")
-                    return [TextContent(type="text", text=response_text)]
+                    return CallToolResult(content=[TextContent(type="text", text=response_text)])
                 else:
                     # Format error result
                     error_text = f"Tool execution failed: {result.error}"
                     logger.error(f"MCP: {error_text}")
-                    return [TextContent(type="text", text=error_text)]
+                    return CallToolResult(
+                        content=[TextContent(type="text", text=error_text)],
+                        isError=True,
+                    )
 
             except Exception as e:
                 error_msg = f"Error executing tool '{name}': {str(e)}"
                 logger.exception(f"MCP: {error_msg}")
-                return [TextContent(type="text", text=f"Error: {error_msg}")]
+                return CallToolResult(
+                    content=[TextContent(type="text", text=f"Error: {error_msg}")],
+                    isError=True,
+                )
 
     def _get_tool_schema(self, tool: BaseTool) -> Dict[str, Any]:
         """
@@ -145,16 +161,22 @@ class MCPServer:
         logger.info(f"Starting MCP server '{self.name}' v{self.version} on {self.host}:{self.port}")
         self._running = True
 
-        # Initialize server
-        async with self.server.connection():
-            logger.info(f"MCP server started successfully")
-            logger.info(f"Exposing {len(self.tool_registry.get_all_tools())} tools via MCP")
+        try:
+            async with stdio_server() as (read_stream, write_stream):
+                logger.info("MCP server started successfully")
+                logger.info(f"Exposing {len(self.tool_registry.get_all_tools())} tools via MCP")
 
-            # Keep server running
-            try:
-                await asyncio.Event().wait()
-            except asyncio.CancelledError:
-                logger.info("MCP server shutdown requested")
+                init_options = self.server.create_initialization_options()
+                await self.server.run(
+                    read_stream,
+                    write_stream,
+                    init_options,
+                    raise_exceptions=False,
+                )
+        except asyncio.CancelledError:
+            logger.info("MCP server shutdown requested")
+        finally:
+            self._running = False
 
     async def stop(self):
         """Stop the MCP server."""

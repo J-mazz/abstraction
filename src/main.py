@@ -77,8 +77,9 @@ def get_default_config() -> dict:
         },
         'memory': {
             'type': 'disk',
-            'cache_dir': './data/cache',
-            'max_cache_size_mb': 1000,
+                'headless': True,
+                'timeout': 30,
+                'allowed_hosts': []
             'ttl_hours': 24
         },
         'human_in_loop': {
@@ -249,7 +250,7 @@ def main():
 
         # Register all tools
         logger.info("Registering tools...")
-        register_all_tools()
+        register_all_tools(config)
         tools = tool_registry.list_tools()
         logger.info(f"Registered {sum(len(v) for v in tools.values())} tools across {len(tools)} categories")
 

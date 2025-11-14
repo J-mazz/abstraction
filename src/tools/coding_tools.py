@@ -2,6 +2,7 @@
 Tools for coding tasks.
 """
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Optional
 import black
@@ -64,14 +65,15 @@ class CodeLinterTool(BaseTool):
         Returns:
             ToolOutput with lint results
         """
+        temp_path: Optional[Path] = None
         try:
-            # Write to temp file if needed
-            temp_file = Path("/tmp/temp_lint.py")
-            temp_file.write_text(code)
+            with tempfile.NamedTemporaryFile('w', suffix='.py', delete=False) as temp_file:
+                temp_file.write(code)
+                temp_path = Path(temp_file.name)
 
             # Run pylint
             result = subprocess.run(
-                ["pylint", str(temp_file)],
+                ["pylint", str(temp_path)],
                 capture_output=True,
                 text=True,
                 timeout=30
@@ -89,8 +91,8 @@ class CodeLinterTool(BaseTool):
         except Exception as e:
             return ToolOutput(success=False, result=None, error=str(e))
         finally:
-            if temp_file.exists():
-                temp_file.unlink()
+            if temp_path and temp_path.exists():
+                temp_path.unlink()
 
 
 class CodeExecutorTool(BaseTool):
@@ -115,14 +117,15 @@ class CodeExecutorTool(BaseTool):
         Returns:
             ToolOutput with execution results
         """
+        temp_path: Optional[Path] = None
         try:
-            # Write to temp file
-            temp_file = Path("/tmp/temp_exec.py")
-            temp_file.write_text(code)
+            with tempfile.NamedTemporaryFile('w', suffix='.py', delete=False) as temp_file:
+                temp_file.write(code)
+                temp_path = Path(temp_file.name)
 
             # Execute
             result = subprocess.run(
-                ["python3", str(temp_file)],
+                ["python3", str(temp_path)],
                 capture_output=True,
                 text=True,
                 timeout=timeout
@@ -146,8 +149,8 @@ class CodeExecutorTool(BaseTool):
         except Exception as e:
             return ToolOutput(success=False, result=None, error=str(e))
         finally:
-            if temp_file.exists():
-                temp_file.unlink()
+            if temp_path and temp_path.exists():
+                temp_path.unlink()
 
 
 class FileReadTool(BaseTool):

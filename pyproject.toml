@@ -45,6 +45,14 @@ dependencies = [
     "starlette>=0.27.0",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=5.0.0",
+    "trio>=0.25.0",
+]
+
 [project.scripts]
 abstraction-agent = "src.main:main"
 
@@ -71,3 +79,18 @@ gui = true
 
 # Include all dependencies
 install-dependencies = true
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+omit = [
+    "src/main.py",
+    "src/gui/*",
+    "src/agents/*",
+    "src/nodes/*",
+]
+
+[tool.coverage.report]
+fail_under = 85
+skip_covered = true
+show_missing = true

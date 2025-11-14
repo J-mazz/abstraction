@@ -1,29 +1,30 @@
 """
 Memory and caching system for agent state and conversation history.
 """
-import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 import diskcache as dc
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Message(BaseModel):
     """Represents a single message in the conversation."""
+
     role: str  # 'user', 'assistant', 'system', 'tool'
     content: str
-    timestamp: datetime = datetime.now()
-    metadata: Dict[str, Any] = {}
+    timestamp: datetime = Field(default_factory=datetime.now)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ConversationHistory(BaseModel):
     """Manages conversation history."""
-    messages: List[Message] = []
+
+    messages: List[Message] = Field(default_factory=list)
     session_id: str
-    created_at: datetime = datetime.now()
-    updated_at: datetime = datetime.now()
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
 
 
 class CacheManager:
@@ -125,11 +126,24 @@ class CacheManager:
         Returns:
             Dictionary with cache stats
         """
+        try:
+            hits_misses = self.cache.stats()
+            if isinstance(hits_misses, tuple) and len(hits_misses) >= 2:
+                hits, misses = hits_misses[:2]
+            elif isinstance(hits_misses, dict):
+                hits = hits_misses.get('hits', 0)
+                misses = hits_misses.get('misses', 0)
+            else:
+                hits = misses = 0
+        except Exception as exc:
+            logger.warning(f"Failed to collect cache stats: {exc}")
+            hits = misses = 0
+
         return {
-            'size': self.cache.volume(),
+            'size_bytes': self.cache.volume(),
             'count': len(self.cache),
-            'hits': self.cache.stats(enable=True)[0],
-            'misses': self.cache.stats(enable=True)[1]
+            'hits': hits,
+            'misses': misses,
         }
 
     # Conversation history methods

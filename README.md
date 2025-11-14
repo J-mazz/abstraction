@@ -26,8 +26,8 @@ A robust, production-ready agentic framework built with LangGraph, featuring a n
 - **File Writer**: Write to files
 
 ### Web Tools
-- **Web Scraper**: Extract content from web pages
-- **HTTP Request**: Make HTTP requests (GET, POST, etc.)
+- **Web Scraper**: Extract content from web pages (respects optional hostname allowlist)
+- **HTTP Request**: Make HTTP requests (GET, POST, etc.) with URL safety checks
 - **URL Validator**: Validate and parse URLs
 
 ### Accounting Tools
@@ -219,6 +219,8 @@ is_valid, error = io_firewall.validate_input(user_input, context="code")
 safe_output = io_firewall.filter_output(tool_result)
 ```
 
+> **Firewall Scope & Expectations:** The firewall is best-effort and focuses on sanitizing tool input/output, enforcing file-system guard rails, and redacting obvious secrets. It does **not** replace network firewalls or DLP tooling; outbound HTTP calls are additionally constrained via the optional `tools.web.allowed_hosts` configuration so you can explicitly declare trusted domains.
+
 ### Connecting to External MCP Servers
 
 ```python
@@ -288,6 +290,13 @@ reasoning:
   enabled: true
   min_confidence_threshold: 0.7
   max_iterations: 3
+
+tools:
+  web:
+    timeout: 30
+    allowed_hosts:
+      - "example.com"
+      - "*.wikipedia.org"
 
 mcp:
   enabled: false  # Set to true to enable MCP server
@@ -394,6 +403,22 @@ def register_all_tools():
     # ... existing registrations
     tool_registry.register(MyCustomTool())
 ```
+
+  ### Running Tests
+
+  Install the testing extras once (they're also listed in `requirements.txt`):
+
+  ```bash
+  pip install -r requirements.txt
+  ```
+
+  Run the full pytest suite, including the MCP integration test:
+
+  ```bash
+  pytest
+  ```
+
+  The HTTP and filesystem tools use temporary directories during tests, so they are safe to run on your development machine.
 
 ### Customizing the GUI
 

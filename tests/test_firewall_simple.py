@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""
-Simple test for firewall functionality (no external dependencies).
-"""
+"""Legacy firewall script retained for reference."""
+
+import pytest
+
+pytest.skip("Use tests/test_firewall.py instead of this script.", allow_module_level=True)
+
 import sys
 from pathlib import Path
 

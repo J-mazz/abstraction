@@ -43,6 +43,7 @@ tools:
   web:
     headless: true
     timeout: 30
+    allowed_hosts: []  # Empty list allows all hosts
 
   coding:
     max_file_size_kb: 500

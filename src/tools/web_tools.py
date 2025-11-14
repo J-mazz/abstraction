@@ -1,15 +1,70 @@
 """
-Tools for web tasks.
+Tools for web tasks with built-in URL safety checks.
 """
+from __future__ import annotations
+
 import requests
 from bs4 import BeautifulSoup
-from typing import Optional, Dict, Any
-from urllib.parse import urljoin, urlparse
+from typing import Optional, Dict, Any, Iterable, List
+from urllib.parse import urljoin, urlparse, ParseResult
 from .base import BaseTool, ToolCategory, ToolOutput
 
 
-class WebScraperTool(BaseTool):
-    """Scrape content from a web page."""
+def _normalize_hosts(hosts: Optional[Iterable[str]]) -> List[str]:
+    if not hosts:
+        return []
+    normalized = []
+    for host in hosts:
+        if not host:
+            continue
+        host = host.strip().lower()
+        if host:
+            normalized.append(host)
+    return normalized
+
+
+class _URLSafetyMixin:
+    """Common URL validation helpers for HTTP tools."""
+
+    def __init__(self, allowed_hosts: Optional[Iterable[str]] = None):
+        self._allowed_hosts = _normalize_hosts(allowed_hosts)
+        self._allowed_schemes = {"http", "https"}
+
+    def _host_allowed(self, hostname: str) -> bool:
+        if not hostname:
+            return False
+        hostname = hostname.lower()
+        if not self._allowed_hosts:
+            return True
+
+        for allowed in self._allowed_hosts:
+            if allowed.startswith('*.'):
+                suffix = allowed[1:]
+                if hostname.endswith(suffix) or hostname == suffix.lstrip('.'):
+                    return True
+            elif hostname == allowed:
+                return True
+        return False
+
+    def _validate_url(self, url: str) -> ParseResult:
+        parsed = urlparse(url)
+        scheme = parsed.scheme.lower()
+        if scheme not in self._allowed_schemes:
+            raise ValueError(f"Unsupported URL scheme '{parsed.scheme}'")
+        if not parsed.hostname:
+            raise ValueError("URL must include a hostname")
+        if not self._host_allowed(parsed.hostname):
+            raise ValueError(f"Host '{parsed.hostname}' is not allowlisted")
+        return parsed
+
+
+class WebScraperTool(_URLSafetyMixin, BaseTool):
+    """Scrape content from a web page while enforcing URL safety policies."""
+
+    def __init__(self, allowed_hosts: Optional[Iterable[str]] = None, timeout: int = 30):
+        BaseTool.__init__(self)
+        _URLSafetyMixin.__init__(self, allowed_hosts)
+        self._timeout = timeout
 
     @property
     def category(self) -> ToolCategory:
@@ -37,7 +92,8 @@ class WebScraperTool(BaseTool):
             ToolOutput with scraped content
         """
         try:
-            response = requests.get(url, timeout=30)
+            parsed = self._validate_url(url)
+            response = requests.get(url, timeout=self._timeout)
             response.raise_for_status()
 
             soup = BeautifulSoup(response.content, 'html.parser')
@@ -45,7 +101,8 @@ class WebScraperTool(BaseTool):
             result = {
                 "url": url,
                 "status_code": response.status_code,
-                "title": soup.title.string if soup.title else None
+                "title": soup.title.string if soup.title else None,
+                "hostname": parsed.hostname,
             }
 
             if selector:
@@ -70,8 +127,13 @@ class WebScraperTool(BaseTool):
             return ToolOutput(success=False, result=None, error=str(e))
 
 
-class HTTPRequestTool(BaseTool):
-    """Make HTTP requests."""
+class HTTPRequestTool(_URLSafetyMixin, BaseTool):
+    """Make HTTP requests with hostname allowlisting."""
+
+    def __init__(self, allowed_hosts: Optional[Iterable[str]] = None, timeout: int = 30):
+        BaseTool.__init__(self)
+        _URLSafetyMixin.__init__(self, allowed_hosts)
+        self._timeout = timeout
 
     @property
     def category(self) -> ToolCategory:
@@ -103,13 +165,14 @@ class HTTPRequestTool(BaseTool):
             ToolOutput with response
         """
         try:
+            parsed = self._validate_url(url)
             response = requests.request(
                 method=method.upper(),
                 url=url,
                 headers=headers,
                 data=data,
                 json=json_data,
-                timeout=30
+                timeout=self._timeout
             )
 
             result = {
@@ -117,7 +180,8 @@ class HTTPRequestTool(BaseTool):
                 "method": method,
                 "status_code": response.status_code,
                 "headers": dict(response.headers),
-                "text": response.text[:1000]  # Limit response size
+                "text": response.text[:1000],  # Limit response size
+                "hostname": parsed.hostname,
             }
 
             # Try to parse JSON

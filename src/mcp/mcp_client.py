@@ -2,9 +2,10 @@
 MCP Client implementation for connecting to external MCP servers.
 """
 import asyncio
-from typing import Any, Dict, List, Optional
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 from mcp.client.session import ClientSession
-from mcp.client.stdio import stdio_client
+from mcp.client.stdio import stdio_client, StdioServerParameters
 from mcp.types import Tool as MCPTool
 from loguru import logger
 
@@ -27,9 +28,10 @@ class MCPClient:
             server_url: URL of the MCP server to connect to (optional)
         """
         self.server_url = server_url
-        self.client: Optional[ClientSession] = None
         self._connected = False
         self._available_tools: List[MCPTool] = []
+        self._command: Optional[str] = None
+        self._args: List[str] = []
 
     async def connect(self, command: str, args: List[str] = None):
         """
@@ -47,37 +49,40 @@ class MCPClient:
             return
 
         try:
-            logger.info(f"Connecting to MCP server: {command} {args or []}")
+            self._command = command
+            self._args = args or []
+            logger.info(f"Connecting to MCP server: {command} {self._args}")
 
-            # Connect via stdio
-            async with stdio_client(command, args or []) as (read, write):
-                async with ClientSession(read, write) as client:
-                    self.client = client
-                    self._connected = True
+            await self._with_client(self._discover_tools)
 
-                    # Initialize connection
-                    await client.initialize()
-
-                    # Discover available tools
-                    await self._discover_tools()
-
-                    logger.info(f"Connected to MCP server. Found {len(self._available_tools)} tools")
+            self._connected = True
+            logger.info(f"Connected to MCP server. Found {len(self._available_tools)} tools")
 
         except Exception as e:
             logger.error(f"Failed to connect to MCP server: {e}")
             self._connected = False
+            self._command = None
+            self._args = []
             raise
 
-    async def _discover_tools(self):
-        """Discover available tools from the connected server."""
-        if not self.client:
-            return
+    async def _with_client(self, handler: Callable[[ClientSession], Awaitable[Any]]):
+        """Helper to open a transient client session."""
+        if not self._command:
+            raise RuntimeError("MCP client is not configured")
 
+        params = StdioServerParameters(command=self._command, args=self._args)
+
+        async with stdio_client(params) as (read, write):
+            async with ClientSession(read, write) as client:
+                await client.initialize()
+                return await handler(client)
+
+    async def _discover_tools(self, client: ClientSession):
+        """Discover available tools from the connected server."""
         try:
-            tools_response = await self.client.list_tools()
+            tools_response = await client.list_tools()
             self._available_tools = tools_response.tools
             logger.info(f"Discovered {len(self._available_tools)} tools from MCP server")
-
         except Exception as e:
             logger.error(f"Failed to discover tools: {e}")
             self._available_tools = []
@@ -93,7 +98,7 @@ class MCPClient:
         Returns:
             ToolOutput with results
         """
-        if not self._connected or not self.client:
+        if not self._connected or not self._command:
             return ToolOutput(
                 success=False,
                 result=None,
@@ -102,23 +107,24 @@ class MCPClient:
 
         try:
             logger.info(f"Calling MCP tool: {tool_name}")
+            
+            async def _invoke(client: ClientSession) -> ToolOutput:
+                response = await client.call_tool(tool_name, arguments)
 
-            # Call the tool
-            response = await self.client.call_tool(tool_name, arguments)
+                result_text = ""
+                for content in response.content:
+                    if hasattr(content, 'text'):
+                        result_text += content.text
 
-            # Extract text content from response
-            result_text = ""
-            for content in response.content:
-                if hasattr(content, 'text'):
-                    result_text += content.text
+                logger.info(f"MCP tool '{tool_name}' call succeeded")
 
-            logger.info(f"MCP tool '{tool_name}' call succeeded")
+                return ToolOutput(
+                    success=True,
+                    result=result_text,
+                    metadata={"mcp_tool": tool_name}
+                )
 
-            return ToolOutput(
-                success=True,
-                result=result_text,
-                metadata={"mcp_tool": tool_name}
-            )
+            return await self._with_client(_invoke)
 
         except Exception as e:
             logger.error(f"MCP tool call failed: {e}")
@@ -151,8 +157,9 @@ class MCPClient:
 
         logger.info("Disconnecting from MCP server...")
         self._connected = False
-        self.client = None
         self._available_tools = []
+        self._command = None
+        self._args = []
         logger.info("Disconnected from MCP server")
 
     def is_connected(self) -> bool:
@@ -201,18 +208,21 @@ class MCPToolWrapper(BaseTool):
         Returns:
             ToolOutput with results
         """
-        # Run async call in sync context
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # If loop is already running, create a task
-            return asyncio.create_task(
-                self.mcp_client.call_tool(self._tool_name, kwargs)
-            )
-        else:
-            # Otherwise run until complete
-            return loop.run_until_complete(
-                self.mcp_client.call_tool(self._tool_name, kwargs)
-            )
+        async def _runner():
+            return await self.mcp_client.call_tool(self._tool_name, kwargs)
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop_running = loop.is_running()
+        except RuntimeError:
+            loop_running = False
+
+        if not loop_running:
+            return asyncio.run(_runner())
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(lambda: asyncio.run(_runner()))
+            return future.result()
 
 
 async def connect_to_mcp_server(command: str, args: List[str] = None) -> MCPClient:

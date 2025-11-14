@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""
-Test script for MCP integration and firewall functionality.
-"""
+"""Legacy MCP test script retained for manual execution."""
+
+import pytest
+
+pytest.skip("Use pytest-based tests under tests/ instead of this script.", allow_module_level=True)
+
 import sys
 from pathlib import Path
 

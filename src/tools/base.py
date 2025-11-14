@@ -7,6 +7,14 @@ from pydantic import BaseModel, Field
 from enum import Enum
 from loguru import logger
 
+try:
+    from ..mcp.firewall import io_firewall as _io_firewall
+except Exception:  # pragma: no cover - fallback when firewall module is unavailable
+    _io_firewall = None
+
+# Expose firewall instance for tests (can be monkeypatched)
+io_firewall = _io_firewall
+
 
 class ToolCategory(str, Enum):
     """Tool categories for organization."""
@@ -182,19 +190,15 @@ class ToolRegistry:
 
         try:
             # Firewall validation (if enabled)
-            if use_firewall:
-                try:
-                    from ..mcp.firewall import io_firewall
-                    is_valid, error_msg = io_firewall.validate_tool_execution(name, kwargs)
-                    if not is_valid:
-                        logger.warning(f"Firewall blocked tool '{name}': {error_msg}")
-                        return ToolOutput(
-                            success=False,
-                            result=None,
-                            error=f"Security validation failed: {error_msg}"
-                        )
-                except ImportError:
-                    logger.warning("Firewall module not available, skipping validation")
+            if use_firewall and io_firewall:
+                is_valid, error_msg = io_firewall.validate_tool_execution(name, kwargs)
+                if not is_valid:
+                    logger.warning(f"Firewall blocked tool '{name}': {error_msg}")
+                    return ToolOutput(
+                        success=False,
+                        result=None,
+                        error=f"Security validation failed: {error_msg}"
+                    )
 
             # Tool input validation
             if not tool.validate_input(**kwargs):
@@ -208,12 +212,8 @@ class ToolRegistry:
             result = tool.execute(**kwargs)
 
             # Filter output through firewall (if enabled)
-            if use_firewall and result.success:
-                try:
-                    from ..mcp.firewall import io_firewall
-                    result.result = io_firewall.filter_output(result.result)
-                except ImportError:
-                    pass
+            if use_firewall and io_firewall and result.success:
+                result.result = io_firewall.filter_output(result.result)
 
             return result
 
