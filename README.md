@@ -4,6 +4,8 @@ A robust, production-ready agentic framework built with LangGraph, featuring a n
 
 [![CodeScene Average Code Health](https://codescene.io/projects/73691/status-badges/average-code-health)](https://codescene.io/projects/73691)[![CodeScene Hotspot Code Health](https://codescene.io/projects/73691/status-badges/hotspot-code-health)](https://codescene.io/projects/73691)[![CodeScene System Mastery](https://codescene.io/projects/73691/status-badges/system-mastery)](https://codescene.io/projects/73691)
 
+<iframe src="https://github.com/sponsors/J-mazz/button" title="Sponsor J-mazz" height="32" width="114" style="border: 0; border-radius: 6px;"></iframe>
+
 ## Features
 
 - **🤖 LangGraph Orchestration**: Robust agent workflow with state management
