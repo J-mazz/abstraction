@@ -1,69 +1,43 @@
-"""
-Main Qt GUI window for the agent dashboard.
+"""Main Qt GUI window for the agent dashboard.
+
+This module defines the primary application window and wires together
+the agent graph with the richer GUI components (chat, monitoring,
+settings) and the theme manager.
 """
 import sys
-from typing import Dict, Any, Optional
+from typing import Dict, Any
+
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QTextEdit, QLineEdit, QPushButton, QLabel, QSplitter,
-    QListWidget, QTabWidget, QProgressBar, QMessageBox, QDialog,
-    QDialogButtonBox, QTreeWidget, QTreeWidgetItem
+    QLabel, QSplitter, QListWidget, QTabWidget, QProgressBar,
+    QMessageBox, QTreeWidget, QTreeWidgetItem, QToolBar, QAction
 )
 from PySide6.QtCore import Qt, Signal, QThread, Slot
-from PySide6.QtGui import QFont, QTextCursor
 from loguru import logger
 
+from .widgets.chat_widget import ChatWidget
+from .widgets.monitoring_widget import MonitoringWidget
+from .components.settings_dialog import SettingsDialog
+from .themes.theme_manager import theme_manager, Theme
 
-class ApprovalDialog(QDialog):
+
+class ApprovalDialog(QMessageBox):
     """Dialog for approving tool executions."""
 
     def __init__(self, tool_call: Dict[str, Any], parent=None):
         super().__init__(parent)
-        self.tool_call = tool_call
-        self.approved = False
-        self.init_ui()
-
-    def init_ui(self):
-        """Initialize the UI."""
         self.setWindowTitle("Tool Approval Required")
-        self.setModal(True)
-        self.resize(500, 300)
+        self.setIcon(QMessageBox.Question)
+        self.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+        self.setDefaultButton(QMessageBox.Ok)
 
-        layout = QVBoxLayout()
+        tool_name = tool_call.get("tool", "unknown")
+        reason = tool_call.get("reason", "No reason provided")
+        params = tool_call.get("params", {})
 
-        # Tool info
-        info_label = QLabel(f"<h3>Tool: {self.tool_call['tool']}</h3>")
-        layout.addWidget(info_label)
-
-        # Reason
-        reason_label = QLabel(f"<b>Reason:</b> {self.tool_call.get('reason', 'No reason provided')}")
-        reason_label.setWordWrap(True)
-        layout.addWidget(reason_label)
-
-        # Parameters
-        params_label = QLabel("<b>Parameters:</b>")
-        layout.addWidget(params_label)
-
-        params_text = QTextEdit()
-        params_text.setReadOnly(True)
-        params_text.setMaximumHeight(100)
-        params_text.setPlainText(str(self.tool_call.get('params', {})))
-        layout.addWidget(params_text)
-
-        # Buttons
-        button_box = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
-        )
-        button_box.accepted.connect(self.approve)
-        button_box.rejected.connect(self.reject)
-        layout.addWidget(button_box)
-
-        self.setLayout(layout)
-
-    def approve(self):
-        """Approve the tool."""
-        self.approved = True
-        self.accept()
+        self.setText(f"Tool: {tool_name}")
+        self.setInformativeText(reason)
+        self.setDetailedText(str(params))
 
 
 class AgentThread(QThread):
@@ -92,12 +66,13 @@ class AgentThread(QThread):
 class MainWindow(QMainWindow):
     """Main application window."""
 
-    def __init__(self, agent_graph):
+    def __init__(self, agent_graph, initial_config: Dict[str, Any] | None = None):
         super().__init__()
         self.agent_graph = agent_graph
         self.current_session = "default"
         self.agent_thread = None
         self.pending_approval = None
+        self.config: Dict[str, Any] = initial_config or {}
 
         self.init_ui()
         logger.info("Main window initialized")
@@ -106,6 +81,11 @@ class MainWindow(QMainWindow):
         """Initialize the user interface."""
         self.setWindowTitle("Abstraction - AI Agent Framework")
         self.setGeometry(100, 100, 1200, 800)
+
+        # Apply initial theme
+        initial_theme = self.config.get("gui", {}).get("theme", "light")
+        theme_lookup = {"light": Theme.LIGHT, "dark": Theme.DARK, "auto": Theme.AUTO}
+        theme_manager.set_theme(theme_lookup.get(initial_theme, Theme.LIGHT))
 
         # Central widget
         central_widget = QWidget()
@@ -119,47 +99,27 @@ class MainWindow(QMainWindow):
         header.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(header)
 
-        # Status bar
+        # Toolbar
+        toolbar = QToolBar("Main Toolbar", self)
+        self.addToolBar(toolbar)
+
+        settings_action = QAction("Settings", self)
+        settings_action.triggered.connect(self.open_settings)
+        toolbar.addAction(settings_action)
+
+        # Status bar-like label
         self.status_bar = QLabel("Ready")
-        self.status_bar.setStyleSheet("background-color: #2ecc71; color: white; padding: 5px;")
         main_layout.addWidget(self.status_bar)
 
         # Splitter for main content
         splitter = QSplitter(Qt.Horizontal)
 
-        # Left panel - Chat and input
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
+        # Left panel - Chat widget
+        self.chat_widget = ChatWidget()
+        self.chat_widget.message_sent.connect(self.on_user_message)
+        splitter.addWidget(self.chat_widget)
 
-        # Chat display
-        self.chat_display = QTextEdit()
-        self.chat_display.setReadOnly(True)
-        self.chat_display.setFont(QFont("Monospace", 10))
-        left_layout.addWidget(QLabel("<b>Conversation:</b>"))
-        left_layout.addWidget(self.chat_display)
-
-        # Input area
-        input_layout = QHBoxLayout()
-        self.input_field = QLineEdit()
-        self.input_field.setPlaceholderText("Enter your task here...")
-        self.input_field.returnPressed.connect(self.send_message)
-        input_layout.addWidget(self.input_field)
-
-        self.send_button = QPushButton("Send")
-        self.send_button.clicked.connect(self.send_message)
-        input_layout.addWidget(self.send_button)
-
-        left_layout.addLayout(input_layout)
-
-        # Progress bar
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setMaximum(0)
-        self.progress_bar.setVisible(False)
-        left_layout.addWidget(self.progress_bar)
-
-        splitter.addWidget(left_panel)
-
-        # Right panel - Tabs for details
+        # Right panel - Tabs for details and monitoring
         right_panel = QTabWidget()
 
         # Tools tab
@@ -167,6 +127,7 @@ class MainWindow(QMainWindow):
         right_panel.addTab(self.tools_list, "Tools Used")
 
         # Reasoning tab
+        from PySide6.QtWidgets import QTextEdit
         self.reasoning_display = QTextEdit()
         self.reasoning_display.setReadOnly(True)
         right_panel.addTab(self.reasoning_display, "Reasoning")
@@ -179,30 +140,37 @@ class MainWindow(QMainWindow):
         # Logs tab
         self.logs_display = QTextEdit()
         self.logs_display.setReadOnly(True)
-        self.logs_display.setFont(QFont("Monospace", 9))
         right_panel.addTab(self.logs_display, "Logs")
 
-        splitter.addWidget(right_panel)
+        # Monitoring tab
+        self.monitoring_widget = MonitoringWidget()
+        right_panel.addTab(self.monitoring_widget, "Monitoring")
 
-        # Set splitter sizes (60% left, 40% right)
+        splitter.addWidget(right_panel)
         splitter.setSizes([720, 480])
 
         main_layout.addWidget(splitter)
 
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMaximum(0)
+        self.progress_bar.setVisible(False)
+        main_layout.addWidget(self.progress_bar)
+
         self.log_message("System initialized and ready.")
 
-    def send_message(self):
-        """Send a message to the agent."""
-        task = self.input_field.text().strip()
+    def on_user_message(self, task: str):
+        """Handle a user message from the chat widget."""
         if not task:
             return
 
-        self.input_field.clear()
-        self.append_chat(f"You: {task}", "user")
+        # Echo message into chat as user bubble
+        self.chat_widget.add_message({"role": "user", "content": task})
 
         # Disable input while processing
-        self.input_field.setEnabled(False)
-        self.send_button.setEnabled(False)
+        # Disable input while processing
+        self.chat_widget.input_field.setEnabled(False)
+        self.chat_widget.send_button.setEnabled(False)
         self.progress_bar.setVisible(True)
         self.set_status("Processing...", "#f39c12")
 
@@ -217,13 +185,13 @@ class MainWindow(QMainWindow):
     def on_agent_finished(self, state: Dict[str, Any]):
         """Handle agent completion."""
         self.progress_bar.setVisible(False)
-        self.input_field.setEnabled(True)
-        self.send_button.setEnabled(True)
-        self.set_status("Ready", "#2ecc71")
+        self.chat_widget.input_field.setEnabled(True)
+        self.chat_widget.send_button.setEnabled(True)
+        self.set_status("Ready", theme_manager.get_color("secondary"))
 
-        # Display result
+        # Display result in chat widget
         final_answer = state.get('final_answer', 'No answer provided')
-        self.append_chat(f"Agent: {final_answer}", "assistant")
+        self.chat_widget.add_message({"role": "assistant", "content": final_answer})
 
         # Update tools list
         for tool in state.get('tools_used', []):
@@ -236,17 +204,30 @@ class MainWindow(QMainWindow):
         # Update state tree
         self.update_state_tree(state)
 
-        self.log_message(f"Task completed in {state['iteration_count']} iterations")
+        iteration_count = state.get("iteration_count")
+        if iteration_count is not None:
+            self.log_message(f"Task completed in {iteration_count} iterations")
+
+        # Update monitoring widget with basic stats
+        stats = {
+            "total_conversations": 1,
+            "active_conversations": 0,
+            "total_messages": len(state.get("messages", [])),
+            "tool_calls": len(state.get("tools_used", [])),
+            "average_response_time": state.get("response_time", 0.0),
+            "error_rate": 0.0,
+        }
+        self.monitoring_widget.update_agent_stats(stats)
 
     @Slot(str)
     def on_agent_error(self, error: str):
         """Handle agent error."""
         self.progress_bar.setVisible(False)
-        self.input_field.setEnabled(True)
-        self.send_button.setEnabled(True)
-        self.set_status("Error", "#e74c3c")
+        self.chat_widget.input_field.setEnabled(True)
+        self.chat_widget.send_button.setEnabled(True)
+        self.set_status("Error", theme_manager.get_color("accent"))
 
-        self.append_chat(f"Error: {error}", "error")
+        self.chat_widget.add_message({"role": "system", "content": f"Error: {error}"})
         self.log_message(f"Error: {error}")
 
         QMessageBox.critical(self, "Agent Error", f"An error occurred:\n{error}")
@@ -254,7 +235,7 @@ class MainWindow(QMainWindow):
     @Slot(str)
     def on_agent_status(self, status: str):
         """Handle status updates."""
-        self.set_status(status, "#3498db")
+        self.set_status(status, theme_manager.get_color("primary"))
         self.log_message(status)
 
     def approval_callback(self, tool_call: Dict[str, Any]) -> bool:
@@ -271,23 +252,6 @@ class MainWindow(QMainWindow):
         dialog.exec()
         return dialog.approved
 
-    def append_chat(self, message: str, role: str):
-        """Append message to chat display."""
-        cursor = self.chat_display.textCursor()
-        cursor.movePosition(QTextCursor.End)
-
-        if role == "user":
-            cursor.insertHtml(f'<p style="color: #3498db;"><b>{message}</b></p>')
-        elif role == "assistant":
-            cursor.insertHtml(f'<p style="color: #2ecc71;">{message}</p>')
-        elif role == "error":
-            cursor.insertHtml(f'<p style="color: #e74c3c;"><b>{message}</b></p>')
-        else:
-            cursor.insertHtml(f'<p>{message}</p>')
-
-        self.chat_display.setTextCursor(cursor)
-        self.chat_display.ensureCursorVisible()
-
     def log_message(self, message: str):
         """Add message to logs."""
         cursor = self.logs_display.textCursor()
@@ -299,7 +263,28 @@ class MainWindow(QMainWindow):
     def set_status(self, message: str, color: str):
         """Set status bar message."""
         self.status_bar.setText(message)
-        self.status_bar.setStyleSheet(f"background-color: {color}; color: white; padding: 5px;")
+        self.status_bar.setStyleSheet(f"color: {color}; padding: 5px;")
+
+    def open_settings(self):
+        """Open the settings dialog."""
+        dialog = SettingsDialog(self.config, self)
+        dialog.settings_changed.connect(self.on_settings_changed)
+        dialog.exec()
+
+    def on_settings_changed(self, settings: Dict[str, Any]):
+        """Handle settings updates from the dialog."""
+        # Merge new settings into config
+        if settings.get("action") == "clear_cache":
+            self.log_message("Cache clear requested (hook up to cache_manager).")
+            return
+
+        self.config.update(settings)
+
+        # Apply theme if changed
+        gui_conf = settings.get("gui", {})
+        if "theme" in gui_conf:
+            lookup = {"light": Theme.LIGHT, "dark": Theme.DARK, "auto": Theme.AUTO}
+            theme_manager.set_theme(lookup.get(gui_conf["theme"], Theme.LIGHT))
 
     def update_state_tree(self, state: Dict[str, Any]):
         """Update the state tree view."""
