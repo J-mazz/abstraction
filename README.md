@@ -326,27 +326,16 @@ cargo install pyapp --locked
 ### Build
 
 ```bash
-# Linux/macOS
-export PYAPP_PROJECT_PATH=.
-export PYAPP_PYTHON_VERSION=3.11
-export PYAPP_EXEC_SPEC=src.main:main
-export PYAPP_GUI_ENABLED=true
-pyapp build
+# Default PyApp CLI build
+./scripts/build.sh
 
-# Windows
-set PYAPP_PROJECT_PATH=.
-set PYAPP_PYTHON_VERSION=3.11
-set PYAPP_EXEC_SPEC=src.main:main
-set PYAPP_GUI_ENABLED=true
-pyapp build
+# Fallback/source-driven build (former build_fixed.sh)
+./scripts/build.sh --fixed
 ```
 
-This creates a single executable file that includes:
-- Python runtime
-- All dependencies
-- Your application code
+The script checks prerequisites, guides you through the PyApp build, and offers to produce a distributable `.tar.gz`. Use `--force` to skip prompts. The `--fixed` flag bundles the wheel first and compiles PyApp from source (handy when the CLI route hits environment issues).
 
-**Note**: The model (~14GB for Mistral-7B) is NOT bundled. Users still need to download it on first run.
+This still produces a single executable that contains the Python runtime, dependencies, and your code. The first run will download the ~14GB model (not bundled).
 
 ## Project Structure
 

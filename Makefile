@@ -56,11 +56,11 @@ download-model:
 
 # Build standalone executable
 build:
-	@./build.sh
+	@./scripts/build.sh
 
 # Clean build artifacts
 clean:
-	@./clean.sh
+	@./scripts/clean.sh
 
 # Deep clean (including model and cache)
 deep-clean:

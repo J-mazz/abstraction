@@ -1,0 +1,42 @@
+name: Build and Test
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  pull_request:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    env:
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run pytest suite
+        run: python -m pytest
+
+      - name: Install PyApp CLI
+        run: cargo install pyapp --locked
+
+      - name: Make build scripts executable
+        run: chmod +x scripts/*.sh
+
+      - name: Build executable
+        run: ./scripts/build.sh --force

@@ -1,238 +1,339 @@
 #!/bin/bash
-# Build orchestrator for creating standalone executable with PyApp
+# Build orchestrator for creating standalone executables with PyApp
 
-set -e  # Exit on error
+set -euo pipefail
 
-# Colors for output
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "$PROJECT_ROOT"
+
+# Activate virtual environment if present
+if [ -d "${PROJECT_ROOT}/venv" ]; then
+    # shellcheck disable=SC1091
+    source "${PROJECT_ROOT}/venv/bin/activate"
+fi
+
+# Shell colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Configuration
-PROJECT_PATH=$(pwd)
+# Defaults
 PYTHON_VERSION="3.11"
 EXEC_SPEC="src.main:main"
 OUTPUT_NAME="abstraction"
+BUILD_MODE="cli"
+AUTO_CONFIRM=false
 
-echo -e "${BLUE}"
-echo "=========================================="
-echo "  Abstraction Build Orchestrator"
-echo "=========================================="
-echo -e "${NC}"
-
-# Function to print status
-print_status() {
-    echo -e "${GREEN}✓${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}✗${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}⚠${NC} $1"
-}
-
-print_info() {
-    echo -e "${BLUE}ℹ${NC} $1"
-}
-
-# Check if Rust is installed
-echo ""
-print_info "Checking prerequisites..."
-if ! command -v cargo &> /dev/null; then
-    print_error "Rust/Cargo not found!"
-    echo ""
-    echo "Please install Rust toolchain:"
-    echo "  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
-    echo ""
-    echo "After installation, run:"
-    echo "  source \$HOME/.cargo/env"
-    echo "  ./build.sh"
-    exit 1
+# Resolve python command
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON_CMD="python3"
 else
-    RUST_VERSION=$(rustc --version | cut -d' ' -f2)
-    print_status "Rust installed (version: $RUST_VERSION)"
+    PYTHON_CMD="python"
 fi
 
-# Check if PyApp is installed
-if ! command -v pyapp &> /dev/null; then
-    print_warning "PyApp not found. Installing..."
-    echo ""
+usage() {
+    cat <<EOF
+Usage: ./scripts/build.sh [options]
+
+Options:
+  --cli            Use the PyApp CLI (default)
+  --fixed          Use the source-based flow (former build_fixed.sh)
+  --force | -y     Skip interactive confirmations
+  --help | -h      Show this message
+EOF
+}
+
+print_status() { echo -e "${GREEN}✓${NC} $1"; }
+print_error() { echo -e "${RED}✗${NC} $1"; }
+print_warning() { echo -e "${YELLOW}⚠${NC} $1"; }
+print_info() { echo -e "${BLUE}ℹ${NC} $1"; }
+
+ensure_file() {
+    if [ ! -f "$1" ]; then
+        print_error "Required file '$1' not found."
+        exit 1
+    fi
+}
+
+ensure_command() {
+    local cmd="$1"
+    local install_hint="$2"
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        print_error "'$cmd' command not found.${install_hint:+ $install_hint}"
+        exit 1
+    fi
+}
+
+ensure_rust() {
+    if ! command -v cargo >/dev/null 2>&1; then
+        print_error "Rust/Cargo not found. Install it via 'curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh'"
+        exit 1
+    fi
+    local rust_version
+    rust_version=$(rustc --version | cut -d' ' -f2)
+    print_status "Rust detected (version: $rust_version)"
+}
+
+ensure_pyapp_cli() {
+    if command -v pyapp >/dev/null 2>&1; then
+        print_status "PyApp CLI detected"
+        return
+    fi
+    print_warning "PyApp CLI not found. Installing via cargo..."
     cargo install pyapp --locked
-    print_status "PyApp installed"
-else
-    print_status "PyApp already installed"
-fi
+    print_status "PyApp CLI installed"
+}
 
-# Check if dependencies are up to date
-echo ""
-print_info "Checking Python dependencies..."
-if [ -f "requirements.txt" ]; then
-    print_status "requirements.txt found"
-else
-    print_error "requirements.txt not found!"
+ensure_python_build_module() {
+    if ! "$PYTHON_CMD" -m build --version >/dev/null 2>&1; then
+        print_info "Installing python-build tooling..."
+        "$PYTHON_CMD" -m pip install --upgrade build
+    fi
+    print_status "Python build module available"
+}
+
+build_python_wheel() {
+    print_info "Building wheel artifact (dist/*.whl)..."
+    "$PYTHON_CMD" -m build --wheel >/dev/null
+    print_status "Wheel built"
+}
+
+latest_wheel_path() {
+    local wheel
+    wheel=$(ls -t dist/*.whl 2>/dev/null | head -n 1 || true)
+    if [ -z "$wheel" ]; then
+        print_error "No wheel artifacts found under dist/."
+        exit 1
+    fi
+    echo "$wheel"
+}
+
+clone_or_update_pyapp() {
+    if [ ! -d "pyapp-build/.git" ]; then
+        print_info "Cloning PyApp (https://github.com/ofek/pyapp)..."
+        git clone --depth 1 https://github.com/ofek/pyapp.git pyapp-build
+        print_status "PyApp cloned"
+    else
+        print_info "Updating existing pyapp-build checkout..."
+        if (cd pyapp-build && git pull --ff-only >/dev/null); then
+            print_status "PyApp updated"
+        else
+            print_warning "Could not update pyapp-build (local changes?). Continuing with current checkout."
+        fi
+    fi
+}
+
+confirm_or_exit() {
+    if [ "$AUTO_CONFIRM" = true ]; then
+        print_info "Auto-confirm enabled; continuing without prompt."
+        return
+    fi
+    read -p "Proceed with build? [y/N]: " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_warning "Build cancelled by user"
+        exit 0
+    fi
+}
+
+locate_cli_executable() {
+    local candidates=("./$OUTPUT_NAME" "./target/release/$OUTPUT_NAME" "./dist/$OUTPUT_NAME")
+    for path in "${candidates[@]}"; do
+        if [ -f "$path" ]; then
+            echo "$path"
+            return
+        fi
+    done
+    print_error "Unable to locate PyApp output ($OUTPUT_NAME)."
     exit 1
-fi
+}
 
-# Check if pyproject.toml exists
-if [ -f "pyproject.toml" ]; then
-    print_status "pyproject.toml found"
-else
-    print_error "pyproject.toml not found!"
-    exit 1
-fi
+post_build_success() {
+    local exec_path="$1"
+    chmod +x "$exec_path"
+    local exec_size
+    exec_size=$(du -h "$exec_path" | cut -f1)
 
-# Display build configuration
-echo ""
-print_info "Build Configuration:"
-echo "  Project Path: $PROJECT_PATH"
-echo "  Python Version: $PYTHON_VERSION"
-echo "  Entry Point: $EXEC_SPEC"
-echo "  Output Name: $OUTPUT_NAME"
-echo ""
+    echo ""
+    echo -e "${GREEN}==========================================${NC}"
+    echo -e "${GREEN}  Build Successful! 🎉${NC}"
+    echo -e "${GREEN}==========================================${NC}"
+    echo ""
+    echo "Executable: $exec_path"
+    echo "Size: $exec_size"
+    echo ""
+    echo "To run the application:"
+    echo "  $exec_path"
+    echo ""
+    print_warning "Reminder: the first launch downloads ~14GB of model data."
 
-# Ask for confirmation
-read -p "Proceed with build? [y/N]: " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    print_warning "Build cancelled by user"
-    exit 0
-fi
+    maybe_create_distribution "$exec_path" "$exec_size"
+}
 
-# Set environment variables for PyApp
-echo ""
-print_info "Setting PyApp environment variables..."
-export PYAPP_PROJECT_PATH="$PROJECT_PATH"
-export PYAPP_PYTHON_VERSION="$PYTHON_VERSION"
-export PYAPP_EXEC_SPEC="$EXEC_SPEC"
-export PYAPP_IS_GUI="true"
+maybe_create_distribution() {
+    local exec_path="$1"
+    local exec_size="$2"
+    if [ "$AUTO_CONFIRM" = true ]; then
+        print_info "Skipping distribution packaging prompt (--force)."
+        return
+    fi
+    read -p "Create distribution tarball? [y/N]: " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        return
+    fi
 
-print_status "Environment configured"
-
-# Build the executable
-echo ""
-print_info "Building executable (this may take 5-10 minutes)..."
-echo ""
-
-if pyapp build; then
-    print_status "Build completed successfully!"
-else
-    print_error "Build failed!"
-    exit 1
-fi
-
-# Find the generated executable
-echo ""
-print_info "Locating executable..."
-
-# PyApp typically creates the executable in the current directory
-if [ -f "$OUTPUT_NAME" ]; then
-    EXEC_PATH="./$OUTPUT_NAME"
-elif [ -f "./target/release/$OUTPUT_NAME" ]; then
-    EXEC_PATH="./target/release/$OUTPUT_NAME"
-    mv "$EXEC_PATH" "./$OUTPUT_NAME"
-    EXEC_PATH="./$OUTPUT_NAME"
-else
-    print_error "Could not find generated executable!"
-    exit 1
-fi
-
-# Make it executable
-chmod +x "$EXEC_PATH"
-print_status "Executable located: $EXEC_PATH"
-
-# Get file size
-EXEC_SIZE=$(du -h "$EXEC_PATH" | cut -f1)
-echo ""
-print_info "Executable Details:"
-echo "  Location: $EXEC_PATH"
-echo "  Size: $EXEC_SIZE"
-echo ""
-
-# Test the executable
-echo ""
-print_info "Testing executable..."
-if [ -f "$EXEC_PATH" ] && [ -x "$EXEC_PATH" ]; then
-    print_status "Executable is valid"
-else
-    print_error "Executable test failed!"
-    exit 1
-fi
-
-# Success message
-echo ""
-echo -e "${GREEN}"
-echo "=========================================="
-echo "  Build Successful! 🎉"
-echo "=========================================="
-echo -e "${NC}"
-echo ""
-echo "To run the application:"
-echo "  $EXEC_PATH"
-echo ""
-echo "To distribute:"
-echo "  1. Copy '$OUTPUT_NAME' to target system"
-echo "  2. Run it (first run will download model)"
-echo ""
-print_warning "Note: The executable is ~${EXEC_SIZE}. The model (~14GB) downloads on first run."
-echo ""
-
-# Optional: Create distribution package
-read -p "Create distribution package (tar.gz)? [y/N]: " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
     print_info "Creating distribution package..."
+    local dist_name="abstraction-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
+    local dist_dir="./dist/$dist_name"
 
-    DIST_NAME="abstraction-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)"
-    DIST_DIR="./dist/$DIST_NAME"
+    mkdir -p "$dist_dir"
+    cp "$exec_path" "$dist_dir/"
+    cp README.md "$dist_dir/" 2>/dev/null || true
+    cp QUICKSTART.md "$dist_dir/" 2>/dev/null || true
+    cp .env.example "$dist_dir/" 2>/dev/null || true
+    cp LICENSE "$dist_dir/" 2>/dev/null || true
 
-    mkdir -p "$DIST_DIR"
-
-    # Copy executable
-    cp "$EXEC_PATH" "$DIST_DIR/"
-
-    # Copy essential files
-    cp README.md "$DIST_DIR/" 2>/dev/null || true
-    cp QUICKSTART.md "$DIST_DIR/" 2>/dev/null || true
-    cp .env.example "$DIST_DIR/" 2>/dev/null || true
-    cp LICENSE "$DIST_DIR/" 2>/dev/null || true
-
-    # Create simple README for distribution
-    cat > "$DIST_DIR/INSTALL.txt" << 'EOF'
+    cat > "$dist_dir/INSTALL.txt" <<'EOF'
 Abstraction - AI Agent Framework
 ================================
 
 Quick Start:
-1. Create .env file from .env.example
-2. Add your HuggingFace token to .env
-3. Run: ./abstraction
-4. Wait for model download (first run only, ~14GB)
+1. Create .env from .env.example
+2. Add your HuggingFace token
+3. Run the bundled executable
+4. Wait for the initial model download (~14GB)
 
 Requirements:
 - 16GB RAM minimum
 - 20GB free disk space
 - Linux/macOS/Windows
 
-For detailed instructions, see QUICKSTART.md
-
-Support: https://github.com/your-repo
+For details, see QUICKSTART.md
 EOF
 
-    # Create tarball
-    cd ./dist
-    tar -czf "${DIST_NAME}.tar.gz" "$DIST_NAME"
-    cd ..
+    (cd ./dist && tar -czf "${dist_name}.tar.gz" "$dist_name")
+    local pkg_size
+    pkg_size=$(du -h "./dist/${dist_name}.tar.gz" | cut -f1)
+    print_status "Distribution package ready at ./dist/${dist_name}.tar.gz (${pkg_size})"
+}
 
-    DIST_SIZE=$(du -h "./dist/${DIST_NAME}.tar.gz" | cut -f1)
+run_cli_build() {
+    print_info "Selected mode: PyApp CLI"
+    ensure_rust
+    ensure_pyapp_cli
+    ensure_file "requirements.txt"
+    ensure_file "pyproject.toml"
 
-    print_status "Distribution package created!"
     echo ""
-    echo "  Package: ./dist/${DIST_NAME}.tar.gz"
-    echo "  Size: $DIST_SIZE"
+    print_info "Build Configuration:"
+    echo "  Project Path: $PROJECT_ROOT"
+    echo "  Python Version: $PYTHON_VERSION"
+    echo "  Entry Point: $EXEC_SPEC"
+    echo "  Output Name: $OUTPUT_NAME"
     echo ""
+
+    confirm_or_exit
+
+    export PYAPP_PROJECT_PATH="$PROJECT_ROOT"
+    export PYAPP_PYTHON_VERSION="$PYTHON_VERSION"
+    export PYAPP_EXEC_SPEC="$EXEC_SPEC"
+    export PYAPP_IS_GUI="true"
+
+    print_info "Running 'pyapp build' (this can take several minutes)..."
+    if ! pyapp build; then
+        print_error "PyApp CLI build failed"
+        exit 1
+    fi
+
+    local exec_path
+    exec_path=$(locate_cli_executable)
+    post_build_success "$exec_path"
+}
+
+run_fixed_build() {
+    print_info "Selected mode: source-based build (--fixed)"
+    ensure_rust
+    ensure_command git "Install git before running the fixed build."
+    ensure_file "requirements.txt"
+    ensure_file "pyproject.toml"
+    ensure_python_build_module
+
+    echo ""
+    print_info "Build Configuration:"
+    echo "  Project Path: $PROJECT_ROOT"
+    echo "  Python Version: $PYTHON_VERSION"
+    echo "  Entry Point: $EXEC_SPEC"
+    echo "  Output Name: $OUTPUT_NAME"
+    echo "  Wheel Cache: dist/"
+    echo "  PyApp Source: pyapp-build/"
+    echo ""
+
+    confirm_or_exit
+
+    build_python_wheel
+    local wheel_path
+    wheel_path=$(latest_wheel_path)
+    print_status "Using wheel: $wheel_path"
+
+    clone_or_update_pyapp
+
+    export PYAPP_PROJECT_PATH="$wheel_path"
+    export PYAPP_PYTHON_VERSION="$PYTHON_VERSION"
+    export PYAPP_EXEC_SPEC="$EXEC_SPEC"
+    export PYAPP_GUI_ENABLED="true"
+
+    print_info "Building PyApp from source via cargo (may take 5-10 minutes)..."
+    (cd pyapp-build && cargo build --release)
+
+    local built_binary="pyapp-build/target/release/pyapp"
+    if [ ! -f "$built_binary" ]; then
+        print_error "Expected binary '$built_binary' not found."
+        exit 1
+    fi
+
+    cp "$built_binary" "./$OUTPUT_NAME"
+    local exec_path="./$OUTPUT_NAME"
+    post_build_success "$exec_path"
+}
+
+# --- argument parsing ---
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --cli)
+            BUILD_MODE="cli"
+            ;;
+        --fixed)
+            BUILD_MODE="fixed"
+            ;;
+        --force|-y)
+            AUTO_CONFIRM=true
+            ;;
+        --help|-h)
+            usage
+            exit 0
+            ;;
+        *)
+            print_error "Unknown argument: $1"
+            usage
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+echo -e "${BLUE}==========================================${NC}"
+echo -e "${BLUE}  Abstraction Build Orchestrator${NC}"
+echo -e "${BLUE}==========================================${NC}"
+echo ""
+
+if [ "$BUILD_MODE" = "fixed" ]; then
+    run_fixed_build
+else
+    run_cli_build
 fi
 
 print_status "All done!"

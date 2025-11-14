@@ -41,7 +41,7 @@ MODEL_CACHE_DIR=./models
 #### Option A: Using the Quick Start Script (Linux/macOS)
 
 ```bash
-./run.sh
+./scripts/run.sh
 ```
 
 This script will:

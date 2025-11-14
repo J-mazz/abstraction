@@ -13,37 +13,21 @@ cargo install pyapp --locked
 
 ## Build Instructions
 
-### Linux
+### Recommended (PyApp CLI)
+
 ```bash
-# Set environment variables
-export PYAPP_PROJECT_PATH=.
-export PYAPP_PYTHON_VERSION=3.11
-export PYAPP_EXEC_SPEC=src.main:main
-export PYAPP_GUI_ENABLED=true
-
-# Build
-pyapp build
+./scripts/build.sh
 ```
 
-### Windows
-```cmd
-set PYAPP_PROJECT_PATH=.
-set PYAPP_PYTHON_VERSION=3.11
-set PYAPP_EXEC_SPEC=src.main:main
-set PYAPP_GUI_ENABLED=true
+This mode mirrors the previous `build.sh` workflow: it checks for Rust, installs the PyApp CLI if needed, exports the right env vars, and runs `pyapp build`. Use `./scripts/build.sh --force` to bypass prompts in CI.
 
-pyapp build
-```
+### Fallback / Source-Based (former build_fixed)
 
-### macOS
 ```bash
-export PYAPP_PROJECT_PATH=.
-export PYAPP_PYTHON_VERSION=3.11
-export PYAPP_EXEC_SPEC=src.main:main
-export PYAPP_GUI_ENABLED=true
-
-pyapp build
+./scripts/build.sh --fixed
 ```
+
+This path first builds a wheel into `dist/`, clones/updates `pyapp-build/`, and runs `cargo build --release` so you're not reliant on a globally-installed PyApp binary. It copies the resulting executable to the repo root as `./abstraction` and uses the same packaging flow as the CLI mode.
 
 ## Output
 The executable will be created in the current directory:
