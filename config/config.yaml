@@ -8,7 +8,7 @@ agent:
 
 # Model Configuration
 model:
-  base_url: "http://localhost:11434"  # Ollama default
+  base_url: "http://localhost:11434"  # default
   timeout: 120
 
 # Memory Configuration
