@@ -203,6 +203,7 @@ class ChatWidget(QWidget):
         super().__init__(parent)
         self.messages = []
         self.typing_indicator = None
+        self.tooltips_enabled = True
         self.init_ui()
 
     def init_ui(self):
@@ -367,15 +368,23 @@ class ChatWidget(QWidget):
         if cursor.hasSelection():
             selected_text = cursor.selectedText()
         else:
-            # Check if any message has selected text
-            for i in range(self.messages_layout.count()):
-                widget = self.messages_layout.itemAt(i).widget()
-                if isinstance(widget, MessageBubble):
-                    # This is a simplified version - in practice you'd need to check each label
-                    pass
+            # Fallback to copying the last message content
+            if self.messages:
+                last_message = self.messages[-1]
+                selected_text = last_message.get('content', '')
 
         if selected_text:
             QApplication.clipboard().setText(selected_text)
+
+    def set_tooltips_enabled(self, enabled: bool):
+        """Enable or disable tooltips for chat controls."""
+        self.tooltips_enabled = enabled
+
+        input_tip = "Compose a new instruction or question." if enabled else ""
+        send_tip = "Send the current message to the agent." if enabled else ""
+
+        self.input_field.setToolTip(input_tip)
+        self.send_button.setToolTip(send_tip)
 
     def update_theme(self):
         """Update the widget when theme changes."""
