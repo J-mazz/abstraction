@@ -77,10 +77,12 @@ def get_default_config() -> dict:
         },
         'memory': {
             'type': 'disk',
-                'headless': True,
-                'timeout': 30,
-                'allowed_hosts': []
-            'ttl_hours': 24
+            'cache_dir': './data/cache',
+            'max_cache_size_mb': 1024,
+            'ttl_hours': 24,
+            'headless': True,
+            'timeout': 30,
+            'allowed_hosts': []
         },
         'human_in_loop': {
             'enabled': True,

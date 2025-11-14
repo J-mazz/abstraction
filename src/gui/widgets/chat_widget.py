@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton,
     QScrollArea, QLabel, QFrame, QSizePolicy, QMenu, QApplication
 )
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal, QTimer, QEvent
 from ..themes.theme_manager import theme_manager
 
 
@@ -285,10 +285,12 @@ class ChatWidget(QWidget):
 
     def eventFilter(self, obj, event):
         """Handle key events for the input field."""
-        if obj == self.input_field and event.type() == event.KeyPress:
-            if event.key() == Qt.Key_Return and not event.modifiers() & Qt.ShiftModifier:
-                self.send_message()
-                return True
+        if obj == self.input_field:
+            event_type = event.type()
+            if event_type == QEvent.Type.KeyPress:
+                if event.key() == Qt.Key_Return and not event.modifiers() & Qt.ShiftModifier:
+                    self.send_message()
+                    return True
         return super().eventFilter(obj, event)
 
     def add_message(self, message_data: Dict[str, Any]):

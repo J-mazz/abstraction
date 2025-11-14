@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtCharts import QChartView, QChart, QLineSeries, QValueAxis
-from PySide6.QtGui import QPainter, QColor
+from PySide6.QtGui import QPainter, QColor, QBrush
 from ..themes.theme_manager import theme_manager
 import psutil
 import time
@@ -82,18 +82,19 @@ class PerformanceChart(QChartView):
         self.chart = QChart()
         self.chart.addSeries(self.series)
         self.chart.setTitle(title)
-        self.chart.setTitleColor(theme_manager.get_color('text'))
+        text_brush = QBrush(QColor(theme_manager.get_color('text')))
+        self.chart.setTitleBrush(text_brush)
 
         # Create axes
         self.axis_x = QValueAxis()
         self.axis_x.setTitleText("Time (seconds)")
-        self.axis_x.setTitleColor(theme_manager.get_color('text'))
-        self.axis_x.setLabelsColor(theme_manager.get_color('text'))
+        self.axis_x.setTitleBrush(text_brush)
+        self.axis_x.setLabelsBrush(text_brush)
 
         self.axis_y = QValueAxis()
         self.axis_y.setTitleText("Value")
-        self.axis_y.setTitleColor(theme_manager.get_color('text'))
-        self.axis_y.setLabelsColor(theme_manager.get_color('text'))
+        self.axis_y.setTitleBrush(text_brush)
+        self.axis_y.setLabelsBrush(text_brush)
 
         self.chart.addAxis(self.axis_x, Qt.AlignBottom)
         self.chart.addAxis(self.axis_y, Qt.AlignLeft)
@@ -135,14 +136,15 @@ class PerformanceChart(QChartView):
 
     def update_theme(self):
         """Update chart colors when theme changes."""
-        self.chart.setTitleColor(theme_manager.get_color('text'))
+        text_brush = QBrush(QColor(theme_manager.get_color('text')))
+        self.chart.setTitleBrush(text_brush)
         self.chart.setBackgroundBrush(QColor(theme_manager.get_color('background')))
         self.chart.setPlotAreaBackgroundBrush(QColor(theme_manager.get_color('surface')))
 
-        self.axis_x.setTitleColor(theme_manager.get_color('text'))
-        self.axis_x.setLabelsColor(theme_manager.get_color('text'))
-        self.axis_y.setTitleColor(theme_manager.get_color('text'))
-        self.axis_y.setLabelsColor(theme_manager.get_color('text'))
+        self.axis_x.setTitleBrush(text_brush)
+        self.axis_x.setLabelsBrush(text_brush)
+        self.axis_y.setTitleBrush(text_brush)
+        self.axis_y.setLabelsBrush(text_brush)
 
 
 class SystemMonitor(QWidget):

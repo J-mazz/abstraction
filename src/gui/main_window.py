@@ -11,10 +11,10 @@ from typing import Dict, Any
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout,
     QLabel, QSplitter, QListWidget, QTabWidget, QProgressBar,
-    QMessageBox, QTreeWidget, QTreeWidgetItem, QToolBar, QAction, QTextEdit
+    QMessageBox, QTreeWidget, QTreeWidgetItem, QToolBar, QTextEdit
 )
 from PySide6.QtCore import Qt, Signal, QThread, Slot
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QAction, QTextCursor
 from loguru import logger
 
 from .widgets.chat_widget import ChatWidget
