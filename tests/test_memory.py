@@ -31,20 +31,31 @@ def test_cache_stats(cache_manager):
 
 def test_conversation_roundtrip(cache_manager):
     session_id = "session-123"
-    history = ConversationHistory(session_id=session_id)
-    history.messages.append(
-        Message(role="user", content="hi", timestamp=datetime.now(), metadata={"id": 1})
-    )
-    cache_manager.save_conversation(session_id, history)
+    # Create dict messages instead of ConversationHistory
+    messages = [
+        {
+            "role": "user",
+            "content": "hi",
+            "timestamp": datetime.now().isoformat(),
+            "metadata": {"id": 1}
+        }
+    ]
+    cache_manager.save_conversation(session_id, messages)
 
     loaded = cache_manager.load_conversation(session_id)
     assert loaded is not None
-    assert loaded.messages[0].role == "user"
+    assert loaded[0]["role"] == "user"
 
-    cache_manager.add_message(session_id, "assistant", "hey")
+    # Add message as dict
+    cache_manager.add_message(session_id, {
+        "role": "assistant",
+        "content": "hey",
+        "timestamp": datetime.now().isoformat(),
+        "metadata": {}
+    })
     recent = cache_manager.get_recent_messages(session_id, limit=2)
     assert len(recent) == 2
-    assert recent[-1].role == "assistant"
+    assert recent[-1]["role"] == "assistant"
 
 
 def test_cache_manager_handles_backend_errors(cache_manager, monkeypatch):

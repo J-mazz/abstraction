@@ -27,6 +27,51 @@ class ConversationHistory(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.now)
 
 
+def dict_to_message(msg_dict: Dict[str, Any]) -> Message:
+    """
+    Convert a dict message (from graph state) to a Message object.
+
+    Args:
+        msg_dict: Dictionary with 'role', 'content', 'timestamp' keys
+
+    Returns:
+        Message object
+    """
+    timestamp_str = msg_dict.get('timestamp')
+    if isinstance(timestamp_str, str):
+        try:
+            timestamp = datetime.fromisoformat(timestamp_str)
+        except ValueError:
+            timestamp = datetime.now()
+    else:
+        timestamp = datetime.now()
+
+    return Message(
+        role=msg_dict['role'],
+        content=msg_dict['content'],
+        timestamp=timestamp,
+        metadata=msg_dict.get('metadata', {})
+    )
+
+
+def message_to_dict(message: Message) -> Dict[str, Any]:
+    """
+    Convert a Message object to a dict message (for graph state).
+
+    Args:
+        message: Message object
+
+    Returns:
+        Dictionary with 'role', 'content', 'timestamp' keys
+    """
+    return {
+        'role': message.role,
+        'content': message.content,
+        'timestamp': message.timestamp.isoformat(),
+        'metadata': message.metadata
+    }
+
+
 class CacheManager:
     """Manages caching for agent memory and state."""
 
@@ -147,37 +192,67 @@ class CacheManager:
         }
 
     # Conversation history methods
-    def save_conversation(self, session_id: str, history: ConversationHistory) -> None:
-        """Save conversation history."""
+    def save_conversation(self, session_id: str, messages: List[Dict[str, Any]]) -> None:
+        """
+        Save conversation history from graph state dict messages.
+
+        Args:
+            session_id: Session identifier
+            messages: List of dict messages from graph state
+        """
         key = f"conversation:{session_id}"
-        history.updated_at = datetime.now()
+
+        # Convert dict messages to Message objects
+        message_objects = [dict_to_message(msg) for msg in messages]
+
+        history = ConversationHistory(
+            session_id=session_id,
+            messages=message_objects,
+            updated_at=datetime.now()
+        )
+
         self.set(key, history.model_dump(), ttl=self.ttl_seconds * 7)  # Keep conversations for 7x longer
 
-    def load_conversation(self, session_id: str) -> Optional[ConversationHistory]:
-        """Load conversation history."""
+    def load_conversation(self, session_id: str) -> List[Dict[str, Any]]:
+        """
+        Load conversation history as dict messages for graph state.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            List of dict messages for graph state
+        """
         key = f"conversation:{session_id}"
         data = self.get(key)
         if data:
-            return ConversationHistory(**data)
-        return None
-
-    def add_message(self, session_id: str, role: str, content: str, metadata: Dict[str, Any] = None) -> None:
-        """Add a message to conversation history."""
-        history = self.load_conversation(session_id)
-        if not history:
-            history = ConversationHistory(session_id=session_id)
-
-        message = Message(
-            role=role,
-            content=content,
-            metadata=metadata or {}
-        )
-        history.messages.append(message)
-        self.save_conversation(session_id, history)
-
-    def get_recent_messages(self, session_id: str, limit: int = 10) -> List[Message]:
-        """Get recent messages from conversation history."""
-        history = self.load_conversation(session_id)
-        if history:
-            return history.messages[-limit:]
+            history = ConversationHistory(**data)
+            # Convert Message objects back to dict messages
+            return [message_to_dict(msg) for msg in history.messages]
         return []
+
+    def add_message(self, session_id: str, message_dict: Dict[str, Any]) -> None:
+        """
+        Add a dict message to conversation history.
+
+        Args:
+            session_id: Session identifier
+            message_dict: Dict message from graph state
+        """
+        current_messages = self.load_conversation(session_id)
+        current_messages.append(message_dict)
+        self.save_conversation(session_id, current_messages)
+
+    def get_recent_messages(self, session_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Get recent messages from conversation history as dict messages.
+
+        Args:
+            session_id: Session identifier
+            limit: Maximum number of messages to return
+
+        Returns:
+            List of dict messages for graph state
+        """
+        all_messages = self.load_conversation(session_id)
+        return all_messages[-limit:] if all_messages else []
