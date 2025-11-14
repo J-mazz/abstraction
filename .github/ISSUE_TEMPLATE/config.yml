@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Documentation
+    url: https://github.com/J-mazz/abstraction/tree/master/docs
+    about: Check our documentation for answers to common questions
+  - name: �� Community Discussions
+    url: https://github.com/J-mazz/abstraction/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: 🐛 Security Issues
+    url: https://github.com/J-mazz/abstraction/security/advisories/new
+    about: Report security vulnerabilities privately
