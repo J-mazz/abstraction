@@ -12,6 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PYAPP_PROJECT_NAME: abstraction
+      PYAPP_IS_GUI: "true"
+      PYAPP_PROJECT_VERSION: "1.0.0"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,11 +35,8 @@ jobs:
       - name: Run pytest suite
         run: python -m pytest
 
-      - name: Install PyApp CLI
-        run: cargo install pyapp --locked
-
       - name: Make build scripts executable
         run: chmod +x scripts/*.sh
 
       - name: Build executable
-        run: ./scripts/build.sh --force
+        run: printf 'y\nn\n' | ./scripts/build.sh

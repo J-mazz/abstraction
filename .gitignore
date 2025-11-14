@@ -55,6 +55,8 @@ abstraction-agent
 abstraction.exe
 pyapp-temp/
 pyapp-build/
+pyapp-latest/
+pyapp-source.tar.gz
 data/cache/
 
 # Temporary files

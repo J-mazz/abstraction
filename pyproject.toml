@@ -1,6 +1,6 @@
 [project]
 name = "abstraction-agent"
-version = "0.1.0"
+version = "1.0.0"
 description = "A robust LangGraph-based agentic framework with native GUI"
 authors = [{name = "Your Name"}]
 readme = "README.md"

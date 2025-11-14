@@ -321,21 +321,21 @@ To create a standalone executable:
 # Install Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Install PyApp
-cargo install pyapp --locked
+# (Optional) export CARGO_HOME if you keep cargo installs in a custom location
+# export CARGO_HOME="$HOME/.cargo"
 ```
 
 ### Build
 
 ```bash
-# Default PyApp CLI build
+# Default PyApp build (installs PyApp locally and copies the binary)
 ./scripts/build.sh
 
 # Fallback/source-driven build (former build_fixed.sh)
 ./scripts/build.sh --fixed
 ```
 
-The script checks prerequisites, guides you through the PyApp build, and offers to produce a distributable `.tar.gz`. Use `--force` to skip prompts. The `--fixed` flag bundles the wheel first and compiles PyApp from source (handy when the CLI route hits environment issues).
+The script checks prerequisites, builds a fresh wheel, installs PyApp from the vendored source with that wheel embedded, and copies the resulting executable to the repo root (with an optional `.tar.gz` bundle). The `--fixed` flag skips the `cargo install` step and compiles PyApp directly within the vendored workspace if you prefer a fully local build. For non-interactive environments, pipe responses instead of passing `--force`, e.g. `printf 'y\nn\n' | ./scripts/build.sh`.
 
 This still produces a single executable that contains the Python runtime, dependencies, and your code. The first run will download the ~14GB model (not bundled).
 

@@ -6,10 +6,8 @@
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-2. Install PyApp:
-```bash
-cargo install pyapp --locked
-```
+
+> **Tip:** The build script automatically installs PyApp from the vendored source tree whenever it needs to embed a new project wheel, so a manual `cargo install pyapp` step is no longer required.
 
 ## Build Instructions
 
@@ -19,7 +17,7 @@ cargo install pyapp --locked
 ./scripts/build.sh
 ```
 
-This mode mirrors the previous `build.sh` workflow: it checks for Rust, installs the PyApp CLI if needed, exports the right env vars, and runs `pyapp build`. Use `./scripts/build.sh --force` to bypass prompts in CI.
+This mode now builds a fresh wheel, installs PyApp from the vendored source with that wheel embedded (via `cargo install`), and copies the resulting binary to the repository root. Feed answers via stdin (`printf 'y\nn\n' | ./scripts/build.sh`) if you need a non-interactive run.
 
 ### Fallback / Source-Based (former build_fixed)
 
@@ -27,7 +25,7 @@ This mode mirrors the previous `build.sh` workflow: it checks for Rust, installs
 ./scripts/build.sh --fixed
 ```
 
-This path first builds a wheel into `dist/`, clones/updates `pyapp-build/`, and runs `cargo build --release` so you're not reliant on a globally-installed PyApp binary. It copies the resulting executable to the repo root as `./abstraction` and uses the same packaging flow as the CLI mode.
+This path first builds a wheel into `dist/`, ensures the vendored PyApp source is present, and runs `cargo build --release` directly (no global cargo install). It copies the resulting executable to the repo root as `./abstraction` and uses the same packaging flow as the CLI mode.
 
 ## Output
 The executable will be created in the current directory:
