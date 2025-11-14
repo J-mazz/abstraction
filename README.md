@@ -117,7 +117,7 @@ nano .env
 Required environment variables:
 ```env
 HUGGINGFACE_TOKEN=your_hf_token_here
-MODEL_NAME=mixtral-8x7b-instruct
+MODEL_NAME=mistral-7b-instruct
 MODEL_CACHE_DIR=./models
 ```
 
