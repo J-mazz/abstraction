@@ -1,0 +1,78 @@
+# Agent Configuration
+agent:
+  name: "Abstraction Agent"
+  model_provider: "huggingface"  # Using HuggingFace transformers
+  model_name: "mistral-7b-instruct-v0.3"  # Mistral 7B Instruct by mistralai
+  temperature: 0.7
+  max_tokens: 4096
+
+# Model Configuration
+model:
+  base_url: "http://localhost:11434"  # Ollama default
+  timeout: 120
+
+# Memory Configuration
+memory:
+  type: "disk"  # "disk", "redis", or "sqlite"
+  cache_dir: "./data/cache"
+  max_cache_size_mb: 1000
+  ttl_hours: 24
+
+# Human-in-the-Loop Configuration
+human_in_loop:
+  enabled: true
+  auto_approve_read_only: false  # Auto-approve read-only operations
+  timeout_seconds: 300  # 5 minutes
+
+# Reasoning Configuration
+reasoning:
+  enabled: true
+  min_confidence_threshold: 0.7
+  max_iterations: 3
+
+# Tools Configuration
+tools:
+  enabled_categories:
+    - coding
+    - web
+    - accounting
+    - writing
+    - file_operations
+
+  # Tool-specific settings
+  web:
+    headless: true
+    timeout: 30
+
+  coding:
+    max_file_size_kb: 500
+    allowed_extensions: [".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".cpp", ".c"]
+
+  accounting:
+    decimal_precision: 2
+
+# GUI Configuration
+gui:
+  host: "0.0.0.0"
+  port: 7860
+  share: false
+  debug: false
+  theme: "default"
+
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_dir: "./logs"
+  max_log_size_mb: 100
+  backup_count: 5
+
+# MCP Configuration
+mcp:
+  enabled: true  # Enable MCP server
+  server:
+    host: localhost
+    port: 3000
+  firewall:
+    enabled: true
+    max_file_size_mb: 100.0
+    filter_sensitive: true
